@@ -30,6 +30,6 @@ public class WebConfig implements WebMvcConfigurer {
                         "/upload/**",
                         "/blog/hot",
                         "/shop-type",
-                        "/voucher");
+                        "/voucher/**");
     }
 }
