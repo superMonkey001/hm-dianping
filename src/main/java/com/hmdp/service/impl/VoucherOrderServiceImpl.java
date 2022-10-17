@@ -1,26 +1,22 @@
 package com.hmdp.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.hmdp.dto.Result;
-import com.hmdp.dto.UserDTO;
-import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.entity.VoucherOrder;
 import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
-import com.hmdp.utils.RedisLock;
-import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
-import org.springframework.aop.framework.AopContext;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.util.Collections;
 
 /**
  * <p>
@@ -40,13 +36,43 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private RedisIdWorker redisIdWorker;
 
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+    private RedisTemplate<String,String> redisTemplate;
+
+    @Autowired
+    private RedissonClient redissonClient;
+
+
+    private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+
+    static {
+        SECKILL_SCRIPT = new DefaultRedisScript<>();
+        SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+        SECKILL_SCRIPT.setResultType(Long.class);
+    }
+
+    @Override
+    public Result seckillVoucher(Long voucherId) {
+        Long userId = UserHolder.getUser().getId();
+        Long result = redisTemplate.execute(
+                SECKILL_SCRIPT,
+                Collections.emptyList(),
+                voucherId.toString(), userId.toString());
+        int res = result.intValue();
+        if (res != 0) {
+            return Result.fail(res == 1 ? "库存不足" : "不能重复下单");
+        }
+        long orderId = redisIdWorker.nextId("order");
+        return Result.ok(orderId);
+    }
+
+
 
     /**
      * 涉及多表操作，需加上@Transactional注解
      * @param voucherId
      * @return
      */
+/*
     @Override
     public Result seckillVoucher(Long voucherId) {
         // 秒杀券
@@ -63,10 +89,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (stock < 1) {
             return Result.fail("库存不足");
         }
+
         Long userId = UserHolder.getUser().getId();
 
-        SimpleRedisLock redisLock = new SimpleRedisLock("order" + userId, stringRedisTemplate);
-        boolean isLock = redisLock.tryLock(1200);
+        // SimpleRedisLock redisLock = new SimpleRedisLock("order" + userId, stringRedisTemplate);
+        RLock lock = redissonClient.getLock("lock:order:" + userId);
+
+        boolean isLock = lock.tryLock();
         if (!isLock) {
             return Result.fail("不允许多次下单");
         }
@@ -75,9 +104,10 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(userId,voucherId);
         } finally {
-            redisLock.unlock();
+            lock.unlock();
         }
     }
+*/
 
     @Transactional(rollbackFor = Exception.class)
     public Result createVoucherOrder(Long userId,Long voucherId) {
@@ -86,7 +116,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         // if (order != null) {
         //     return Result.fail("您已经抢过该商品啦");
         // }
-        // 更快的写法
+        // 更快的写法,查询用户有没有秒杀过
         int count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
         if (count > 0) {
             return Result.fail("您已经抢过该商品啦");
