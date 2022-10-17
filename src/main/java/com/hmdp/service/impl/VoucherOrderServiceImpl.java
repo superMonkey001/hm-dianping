@@ -170,20 +170,20 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //     return Result.fail("您已经抢过该商品啦");
         // }
         // 更快的写法,查询用户有没有秒杀过
-        int count = query().eq("user_id", userId).eq("voucher_id", voucherOrder.getId()).count();
+        int count = query().eq("user_id", userId).eq("voucher_id", voucherOrder.getVoucherId()).count();
         if (count > 0) {
             log.error("您已经抢过该商品啦");
             return;
         }
 
 
-        // 更新seckillVoucher秒杀优惠券表
-        boolean success = seckillVoucherService.update().setSql("stock = stock - 1").eq("voucher_id", voucherOrder.getId()).gt("stock",0).update();
+        // 更新seckillVoucher秒杀优惠券库存
+        boolean success = seckillVoucherService.update().setSql("stock = stock - 1").eq("voucher_id", voucherOrder.getVoucherId()).gt("stock",0).update();
         if (!success) {
             log.error("库存不足");
             return;
         }
-
+        // 保存订单
         save(voucherOrder);
     }
 
