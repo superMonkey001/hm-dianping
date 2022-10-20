@@ -19,4 +19,9 @@ public interface IBlogService extends IService<Blog> {
     Result queryBlogById(Long id);
 
     Result likeBlog(Long id);
+
+    Result queryBlogLikes(Long id);
+
+
+
 }
