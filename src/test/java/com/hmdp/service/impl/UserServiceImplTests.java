@@ -37,6 +37,7 @@ public class UserServiceImplTests {
 
 
     /**
+     * 前提：数据库中已经有很多用户了。
      * 模拟创建一千个token并写入文件
      */
     @Test

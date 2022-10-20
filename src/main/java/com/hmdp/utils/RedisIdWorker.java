@@ -26,7 +26,7 @@ public class RedisIdWorker {
     public long nextId(String keyPrefix) {
         LocalDateTime now = LocalDateTime.now();
         long nowSecond = now.toEpochSecond(ZoneOffset.UTC);
-        long timestamp =nowSecond - BEGIN_TIMESTAMP;
+        long timestamp = nowSecond - BEGIN_TIMESTAMP;
         String date = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         long count = stringRedisTemplate.opsForValue().increment("icr:" + keyPrefix + ":" + date);
         return timestamp << 32 | count;
